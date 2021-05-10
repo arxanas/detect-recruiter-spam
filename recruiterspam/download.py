@@ -20,7 +20,7 @@ def download_inbox(
 ) -> Path:
     if output_path.exists():
         logging.info("Messages already downloaded, not downloading again.")
-        logging.info(f"(Delete `{output_path}` file to re-download.)")
+        logging.info(f"(Delete `{output_path}` to re-download.)")
         return output_path
 
     with Imbox(
