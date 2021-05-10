@@ -18,55 +18,6 @@ from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
 
 
-def download_inbox() -> Path:
-    messages_file = Path("messages")
-    if messages_file.exists():
-        logging.info("Messages already downloaded, not downloading again.")
-        logging.info("(Delete `messages` file to re-download.)")
-        return messages_file
-
-    app_password = os.environ["GMAIL_APP_PASSWORD"].strip()
-    with Imbox(
-        "imap.gmail.com",
-        username="me@waleedkhan.name",
-        password=app_password,
-        ssl=True,
-        ssl_context=None,
-        starttls=False,
-    ) as imbox:
-
-        def message_to_json(uid, message) -> Dict[str, Any]:
-            return {
-                "uid": uid.decode(),
-                "subject": message.subject,
-                "body": "".join(message.body["plain"]),
-                "from": message.sent_from,
-            }
-
-        def process_messages(iter) -> Iterable[Dict[str, Any]]:
-            for (uid, message) in iter:
-                try:
-                    logging.info("Processing {}: {}".format(uid, message.subject))
-                    yield message_to_json(uid, message)
-                except Exception as e:
-                    logging.exception(f"Failed to process message: {message!r}", e)
-
-        spam_messages = list(
-            process_messages(imbox.messages(folder="all", label="recruiter-spam"))
-        )
-        all_messages = list(process_messages(imbox.messages(folder="all")))
-
-    data = json.dumps(
-        {
-            "all_messages": all_messages,
-            "spam_messages": spam_messages,
-        },
-    )
-    with open(messages_file, "w") as f:
-        f.write(data)
-    return messages_file
-
-
 def preprocess_message(message: Dict[str, Any]) -> Tuple[int, Dict[str, int]]:
     lemmatizer = WordNetLemmatizer()
 
