@@ -3,16 +3,42 @@ import json
 import logging
 import pickle
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from .train import (
-    MessageUid,
     Model,
     RawJsonMessage,
     RawJsonMessageCategory,
-    count_words,
-    encode,
+    load_model,
+    preprocess_message,
+    tokenize,
 )
+
+
+def backtest(
+    model: Model, messages: Dict[RawJsonMessageCategory, List[RawJsonMessage]]
+) -> Tuple[int, int]:
+    X = model.count_vectorizer.transform(messages["all_messages"])
+    y = model.classifier.predict(X)
+    flagged_uids = {m["uid"] for m in messages["spam_messages"]}
+
+    logging.info("The following messages were flagged:")
+    true_positives = 0
+    false_positives = 0
+    for (i, pred_flagged) in enumerate(y):
+        if not pred_flagged:
+            continue
+
+        message = messages["all_messages"][i]
+        uid = message["uid"]
+        true_flagged = bool(uid in flagged_uids)
+        if true_flagged:
+            true_positives += 1
+            logging.info("(true positive)  uid=%s %s", uid, message["subject"])
+        else:
+            false_positives += 1
+            logging.info("(false positive) uid=%s %s", uid, message["subject"])
+    return (true_positives, false_positives)
 
 
 def main() -> None:
@@ -34,31 +60,18 @@ def main() -> None:
     messages_path: Path = args.messages
     model_path: Path = args.model
 
+    model = load_model(
+        model_path,
+        import_model=Model,
+        import_preprocess_message=preprocess_message,
+        import_tokenize=tokenize,
+    )
     with open(messages_path) as messages_f:
         messages: Dict[RawJsonMessageCategory, List[RawJsonMessage]] = json.load(
             messages_f
         )
-    all_word_counts = count_words(messages["all_messages"])
-    flagged_messages = {
-        MessageUid(message["uid"]) for message in messages["spam_messages"]
-    }
 
-    with open(model_path, "rb") as f:
-        model: Model = pickle.load(f)
-
-    logging.info("The following messages were flagged:")
-    for (uid, counts) in all_word_counts.items():
-        encoded = encode(model.word_encoder, counts)
-        true_flagged = uid in flagged_messages
-        pred_flagged = 1 in model.classifier.predict([encoded])
-        if pred_flagged:
-            message = next(
-                m for m in messages["all_messages"] if MessageUid(m["uid"]) == uid
-            )
-            if true_flagged:
-                logging.info("(true positive)  uid=%d %s", uid, message["subject"])
-            else:
-                logging.info("(false positive) uid=%d %s", uid, message["subject"])
+    backtest(model, messages)
 
 
 if __name__ == "__main__":

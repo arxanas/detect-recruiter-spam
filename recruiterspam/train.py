@@ -1,129 +1,87 @@
 import argparse
 import json
 import logging
-import multiprocessing as mp
-import pickle
+import joblib
 import re
-from collections import Counter
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Set, Tuple, Union
+from typing import Dict, List, Literal, Union
 
 import nltk
 import numpy as np
 from nltk.stem.wordnet import WordNetLemmatizer
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import ComplementNB
-from tqdm import tqdm
+from sklearn.naive_bayes import ComplementNB, MultinomialNB
 
 RawJsonMessageCategory = Union[Literal["all_messages"], Literal["spam_messages"]]
 RawJsonMessageKey = Union[Literal["uid"], Literal["subject"], Literal["body"]]
 RawJsonMessage = Dict[RawJsonMessageKey, str]
-MessageUid = int
-Word = str
-WordCount = int
-WordCounts = Dict[Word, WordCount]
-WordEncoder = List[str]
 
 
 class InsufficientTrainingSamplesError(Exception):
     pass
 
 
+MODEL_VERSION: int = 2
+
+
 @dataclass(frozen=True, eq=True)
 class Model:
-    word_encoder: WordEncoder
+    model_version: int
+    count_vectorizer: CountVectorizer
     classifier: ComplementNB
 
 
-def preprocess_message(message: RawJsonMessage) -> Tuple[MessageUid, WordCounts]:
-    lemmatizer = WordNetLemmatizer()
-
-    uid = MessageUid(message["uid"])
-    text = message["subject"] + " " + message["body"]
-    text = text.replace("\r\n", " ").replace("\n", " ").lower()
-    words = text.split()
-
-    def process_word(word: str) -> Optional[str]:
-        if len(word) <= 2 or len(word) >= 20:
-            return None
-
-        word = word.lower()
-        word = lemmatizer.lemmatize(word)
-        word = re.sub("[^a-zA-Z]", "", word)
-        return word
-
-    word_counts = Counter(
-        processed for word in words if (processed := process_word(word)) is not None
-    )
-    return (uid, word_counts)
+WORD_PREPROCESS_RE = re.compile(r"[^a-zA-Z0-9\s]")
 
 
-def count_words(messages: List[RawJsonMessage]) -> Dict[MessageUid, WordCounts]:
+def preprocess_message(message: RawJsonMessage) -> str:
+    message_str = message["subject"] + " " + message["body"]
+    message_str = message_str.lower()
+    message_str = WORD_PREPROCESS_RE.sub("", message_str)
+    message_str = unicodedata.normalize("NFKD", message_str)
+    return message_str
+
+
+_lemmatizer: WordNetLemmatizer
+
+
+def init_tokenizer() -> None:
+    """Initialize the tokenizer's lemmatizer (hack to get around serializing
+    lambdas).
+    """
+    global _lemmatizer
     nltk.download("wordnet")
-    uid_to_word_counts = {}
-    with mp.Pool() as pool:
-        for (uid, word_counts) in tqdm(
-            pool.imap(
-                preprocess_message,
-                messages,
-            ),
-            desc="Counting words",
-            total=len(messages),
-        ):
-            uid_to_word_counts[uid] = word_counts
-    return uid_to_word_counts
+    _lemmatizer = WordNetLemmatizer()
 
 
-def make_word_encoder(all_word_counts: Dict[MessageUid, WordCounts]) -> WordEncoder:
-    """Convert all words in the vocabulary into unique label IDs."""
-    all_words: Set[str] = set()
-    for counts in all_word_counts.values():
-        all_words.update(counts.keys())
-    return sorted(all_words)
-
-
-def encode(word_encoder: WordEncoder, word_counts: WordCounts) -> List[int]:
-    return [int(encoded_word in word_counts) for encoded_word in word_encoder]
-
-
-def _make_training(args: Tuple[WordEncoder, WordCounts]) -> List[int]:
-    (word_encoder, word_counts) = args
-    return encode(word_encoder, word_counts)
+def tokenize(text: str) -> np.ndarray:
+    global _lemmatizer
+    return np.array(
+        [_lemmatizer.lemmatize(word) for word in text.split() if 2 <= len(word) <= 20]
+    )
 
 
 def train(
-    all_word_counts: Dict[MessageUid, WordCounts],
-    flagged_messages: Set[MessageUid],
+    X: object,
+    y: object,
     shuffle_training_set: bool = True,
 ) -> Model:
-    word_encoder = make_word_encoder(all_word_counts)
-    inputs = list(all_word_counts.items())
-    classified_messages = [int(uid in flagged_messages) for (uid, _counts) in inputs]
-    word_features: List[np.ndarray] = []
-    with mp.Pool() as pool:
-        for features in tqdm(
-            pool.imap(
-                _make_training,
-                [(word_encoder, counts) for (_uid, counts) in inputs],
-                chunksize=500,
-            ),
-            desc="Creating training data",
-            total=len(all_word_counts),
-        ):
-            word_features.append(np.array(features, copy=True))
-
     X_train, X_test, y_train, y_test = train_test_split(
-        np.array(word_features, copy=True),
-        np.array(classified_messages, copy=True),
+        X,
+        y,
         test_size=0.2,
         shuffle=shuffle_training_set,
     )
     logging.info(
-        "Training Bayesian classifier (%d train, %d test)", len(X_train), len(X_test)
+        "Training Bayesian classifier (%d train, %d test)",
+        X_train.shape[0],
+        X_test.shape[0],
     )
-    classifier = ComplementNB()
+    classifier = MultinomialNB()
     classifier.fit(X_train, y_train)
     assert classifier.class_count_.shape == (2,)
 
@@ -149,10 +107,7 @@ def train(
         false_negative_rate,
     )
 
-    return Model(
-        word_encoder=word_encoder,
-        classifier=classifier,
-    )
+    return classifier
 
 
 def main() -> None:
@@ -181,18 +136,55 @@ def main() -> None:
             messages_f
         )
 
-    all_word_counts = count_words(messages["all_messages"])
-    flagged_messages = {
-        MessageUid(message["uid"]) for message in messages["spam_messages"]
-    }
-    logging.info(
-        "Loaded %d messages and %d flagged", len(all_word_counts), len(flagged_messages)
+    init_tokenizer()
+    count_vectorizer = CountVectorizer(
+        # Drop words that only appear in one document.
+        min_df=1.5 / len(messages["all_messages"]),
+        max_df=0.9,
+        preprocessor=preprocess_message,
+        tokenizer=tokenize,
     )
-    model: Model = train(all_word_counts, flagged_messages)
+    X = count_vectorizer.fit_transform(messages["all_messages"])
+    flagged_messages = {m["uid"] for m in messages["spam_messages"]}
+    y = np.array([int(m["uid"] in flagged_messages) for m in messages["all_messages"]])
+    logging.info(
+        "Loaded %d messages, including %d flagged",
+        len(y),
+        np.count_nonzero(y),
+    )
+
+    classifier = train(X, y)
+    model = Model(
+        model_version=MODEL_VERSION,
+        count_vectorizer=count_vectorizer,
+        classifier=classifier,
+    )
 
     logging.info("Writing model to %s", output_path)
     with open(args.output, "wb") as model_f:
-        pickle.dump(model, model_f)
+        joblib.dump(model, model_f)
+
+
+def load_model(
+    model_path: Path,
+    import_model: object,
+    import_preprocess_message: object,
+    import_tokenize: object,
+) -> Model:
+    # Ensure the caller has imported the required global symbols to unpickle the
+    # object.
+    _ = (import_model, import_preprocess_message, import_tokenize)
+
+    init_tokenizer()
+    with open(model_path, "rb") as f:
+        model: Model = joblib.load(f)
+    if model.model_version != MODEL_VERSION:
+        logging.warn(
+            "Serialized model version %d does not match current model version %d",
+            model.model_version,
+            MODEL_VERSION,
+        )
+    return model
 
 
 if __name__ == "__main__":

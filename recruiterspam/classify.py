@@ -1,10 +1,56 @@
 import argparse
+from dataclasses import dataclass
 import logging
-import pickle
 import sys
 from pathlib import Path
+from typing import List
 
-from .train import Model, count_words, encode, preprocess_message
+from .train import load_model, Model, preprocess_message, tokenize
+
+
+@dataclass(eq=True, frozen=True)
+class ClassifyResult:
+    prediction: bool
+    probability: float
+    top_keywords: List[str]
+
+
+def classify(model: Model, text: str, num_top_keywords: int) -> ClassifyResult:
+    X = model.count_vectorizer.transform(
+        [
+            {
+                "uid": "0",
+                "subject": "",
+                "body": text,
+            }
+        ]
+    )
+    [pred] = model.classifier.predict(X)
+    [[_prob_no, prob_yes]] = model.classifier.predict_proba(X)
+    logging.info("Prediction %s with probability %f", bool(pred), prob_yes)
+
+    [X0] = X.toarray()
+    feature_names = model.count_vectorizer.get_feature_names()
+    words = [
+        (
+            feature_names[word_idx],
+            model.classifier.feature_log_prob_[0, word_idx],
+            model.classifier.feature_log_prob_[1, word_idx],
+        )
+        for word_idx in X0.nonzero()[0]
+        if 0 <= word_idx < len(feature_names)
+    ]
+    words.sort(key=lambda x: min(x[1], x[2]))
+    words = words[:num_top_keywords]
+    logging.info("Top keywords (word, non-spam probability, spam probability)")
+    for (word, negative_prob, positive_prob) in words:
+        logging.info("  %s\t%f\t%f", word, negative_prob, positive_prob)
+
+    return ClassifyResult(
+        prediction=pred,
+        probability=prob_yes,
+        top_keywords=[word for (word, _neg_prob, _pos_prob) in words],
+    )
 
 
 def main() -> None:
@@ -19,37 +65,16 @@ def main() -> None:
     args: argparse.Namespace = parser.parse_args()
     model_path: Path = args.model
 
-    with open(model_path, "rb") as f:
-        model: Model = pickle.load(f)
-
-    # coefs = list(enumerate(model.classifier.coef_[0]))
-    # coefs.sort(key=lambda coef: coef[1])
-    feature_log_prob = model.classifier.feature_log_prob_[0]
+    model = load_model(
+        model_path,
+        import_model=Model,
+        import_preprocess_message=preprocess_message,
+        import_tokenize=tokenize,
+    )
 
     logging.info("Reading text from stdin...")
     text = sys.stdin.read()
-    (_uid, word_counts) = preprocess_message(
-        {
-            "uid": "0",
-            "subject": "",
-            "body": text,
-        }
-    )
-    encoded = encode(model.word_encoder, word_counts)
-    [pred] = model.classifier.predict([encoded])
-
-    top_features = [
-        (feature_log_prob[feature_idx], model.word_encoder[feature_idx])
-        for (feature_idx, feature) in enumerate(encoded)
-        if feature
-    ]
-    top_features.sort(key=lambda x: x[0], reverse=True)
-    logging.info("Top keywords:")
-    for (weight, feature) in top_features[:10]:
-        logging.info("  %s: %f", feature, weight)
-
-    [[_prob_no, prob_yes]] = model.classifier.predict_proba([encoded])
-    logging.info("Prediction %d with probability %f", pred, prob_yes)
+    classify(model=model, text=text, num_top_keywords=5)
 
 
 if __name__ == "__main__":

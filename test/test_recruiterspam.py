@@ -1,14 +1,18 @@
+from recruiterspam.classify import classify
+from recruiterspam.backtest import backtest
 from typing import Any, Dict, List
+import numpy as np
 
 import pytest
+from sklearn.feature_extraction.text import CountVectorizer
 from recruiterspam.train import (
-    MessageUid,
+    MODEL_VERSION,
     Model,
     RawJsonMessage,
     RawJsonMessageCategory,
-    count_words,
-    encode,
+    init_tokenizer,
     preprocess_message,
+    tokenize,
     train,
 )
 
@@ -68,31 +72,74 @@ def example_messages() -> Dict[RawJsonMessageCategory, List[RawJsonMessage]]:
 def example_model(
     example_messages: Dict[RawJsonMessageCategory, List[RawJsonMessage]]
 ) -> Model:
-    all_word_counts = count_words(example_messages["all_messages"])
-    flagged_messages = {
-        MessageUid(message["uid"]) for message in example_messages["spam_messages"]
-    }
+    init_tokenizer()
+    count_vectorizer = CountVectorizer(
+        preprocessor=preprocess_message,
+        tokenizer=tokenize,
+    )
+    X = count_vectorizer.fit_transform(example_messages["all_messages"])
+    flagged_messages = {m["uid"] for m in example_messages["spam_messages"]}
+    y = np.array(
+        [int(m["uid"] in flagged_messages) for m in example_messages["all_messages"]]
+    )
 
-    return train(all_word_counts, flagged_messages, shuffle_training_set=False)
+    classifier = train(X, y, shuffle_training_set=False)
+    return Model(
+        model_version=MODEL_VERSION,
+        count_vectorizer=count_vectorizer,
+        classifier=classifier,
+    )
 
 
 def test_predict(example_model: Model) -> None:
-    (_uid, word_counts) = preprocess_message(
-        {
-            "uid": "10",
-            "subject": "Find a new job opportunity",
-            "body": "This is an example message about increasing your salary.",
-        }
+    X = example_model.count_vectorizer.transform(
+        [
+            {
+                "uid": "10",
+                "subject": "Find a new job opportunity",
+                "body": "This is an example message about increasing your salary.",
+            }
+        ]
     )
-    encoded = encode(example_model.word_encoder, word_counts)
-    assert example_model.classifier.predict([encoded])
+    y_pred = example_model.classifier.predict(X)
+    assert y_pred == [1]
 
-    (_uid, word_counts) = preprocess_message(
-        {
-            "uid": "11",
-            "subject": "I love Python",
-            "body": "This is an example message about machine learning.",
-        }
+    X = example_model.count_vectorizer.transform(
+        [
+            {
+                "uid": "11",
+                "subject": "I love Python",
+                "body": "This is an example message about machine learning.",
+            }
+        ]
     )
-    encoded = encode(example_model.word_encoder, word_counts)
-    assert not example_model.classifier.predict([encoded])
+    y_pred = example_model.classifier.predict(X)
+    assert y_pred == [0]
+
+
+def test_backtest(example_messages, example_model) -> None:
+    (true_positives, false_positives) = backtest(
+        model=example_model, messages=example_messages
+    )
+    assert true_positives == 3
+    assert false_positives == 0
+
+
+def test_classify(example_model) -> None:
+    result = classify(
+        model=example_model,
+        text="Get more compensation by getting a job with Company2",
+        num_top_keywords=5,
+    )
+    assert result.prediction == True
+    assert result.probability >= 0.9
+    assert result.top_keywords == ["company2", "compensation", "get", "more"]
+
+    result = classify(
+        model=example_model,
+        text="Python vs. Rust: who would win?",
+        num_top_keywords=5,
+    )
+    assert result.prediction == False
+    assert result.probability <= 0.3
+    assert result.top_keywords == ["python", "rust", "would", "who"]
