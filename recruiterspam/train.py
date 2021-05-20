@@ -1,13 +1,15 @@
 import argparse
 import json
 import logging
-import joblib
+import os
 import re
+import sys
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Literal, Union
 
+import joblib
 import nltk
 import numpy as np
 from nltk.stem.wordnet import WordNetLemmatizer
@@ -54,7 +56,6 @@ def init_tokenizer() -> None:
     lambdas).
     """
     global _lemmatizer
-    nltk.download("wordnet")
     _lemmatizer = WordNetLemmatizer()
 
 
@@ -167,13 +168,12 @@ def main() -> None:
 
 def load_model(
     model_path: Path,
-    import_model: object,
-    import_preprocess_message: object,
-    import_tokenize: object,
 ) -> Model:
     # Ensure the caller has imported the required global symbols to unpickle the
     # object.
-    _ = (import_model, import_preprocess_message, import_tokenize)
+    sys.modules["__main__"].Model = Model
+    sys.modules["__main__"].preprocess_message = preprocess_message
+    sys.modules["__main__"].tokenize = tokenize
 
     init_tokenizer()
     with open(model_path, "rb") as f:

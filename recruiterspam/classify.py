@@ -47,8 +47,9 @@ def classify(model: Model, text: str, num_top_keywords: int) -> ClassifyResult:
         logging.info("  %s\t%f\t%f", word, negative_prob, positive_prob)
 
     return ClassifyResult(
-        prediction=pred,
-        probability=prob_yes,
+        # Don't use `numpy` numeric values, to ensure that they can be serialized.
+        prediction=bool(pred),
+        probability=float(prob_yes),
         top_keywords=[word for (word, _neg_prob, _pos_prob) in words],
     )
 
