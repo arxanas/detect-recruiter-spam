@@ -66,8 +66,8 @@ def tokenize(text: str) -> np.ndarray:
 
 
 def train(
-    X: object,
-    y: object,
+    X: np.ndarray,
+    y: np.ndarray,
     shuffle_training_set: bool = True,
 ) -> Model:
     X_train, X_test, y_train, y_test = train_test_split(
