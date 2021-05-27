@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Dict, List, Literal, Union
 
 import joblib
-import nltk
 import numpy as np
 from nltk.stem.wordnet import WordNetLemmatizer
 from sklearn.feature_extraction.text import CountVectorizer

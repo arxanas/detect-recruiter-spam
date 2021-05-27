@@ -1,4 +1,4 @@
-FROM python:3.8
+FROM python:3.9
 WORKDIR /usr/src/app
 
 ENV NLTK_DATA=./nltk_data
@@ -18,4 +18,4 @@ RUN env PYTHONPATH=. pytest
 RUN python -m recruiterspam.train --messages messages.json --output ${MODEL_PATH}
 RUN echo "Amazing opportunities for software engineers like you" | python -m recruiterspam.classify --model ${MODEL_PATH}
 
-CMD ["lambda.handler"]
+CMD ["gunicorn", "app:app"]
