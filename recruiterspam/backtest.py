@@ -1,7 +1,6 @@
 import argparse
 import json
 import logging
-import pickle
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -60,12 +59,7 @@ def main() -> None:
     messages_path: Path = args.messages
     model_path: Path = args.model
 
-    model = load_model(
-        model_path,
-        import_model=Model,
-        import_preprocess_message=preprocess_message,
-        import_tokenize=tokenize,
-    )
+    model = load_model(model_path)
     with open(messages_path) as messages_f:
         messages: Dict[RawJsonMessageCategory, List[RawJsonMessage]] = json.load(
             messages_f

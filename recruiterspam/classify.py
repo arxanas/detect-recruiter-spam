@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import List
 
-from .train import load_model, Model, preprocess_message, tokenize
+from .train import load_model, Model
 
 
 @dataclass(eq=True, frozen=True)
@@ -66,12 +66,7 @@ def main() -> None:
     args: argparse.Namespace = parser.parse_args()
     model_path: Path = args.model
 
-    model = load_model(
-        model_path,
-        import_model=Model,
-        import_preprocess_message=preprocess_message,
-        import_tokenize=tokenize,
-    )
+    model = load_model(model_path)
 
     logging.info("Reading text from stdin...")
     text = sys.stdin.read()

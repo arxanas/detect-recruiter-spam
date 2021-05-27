@@ -18,7 +18,7 @@ from recruiterspam.levelsfyi import (
 )
 
 from .classify import ClassifyResult, classify
-from .train import Model, load_model, preprocess_message, tokenize
+from .train import load_model
 
 
 @dataclass(eq=True, frozen=True)
@@ -214,12 +214,7 @@ def main() -> None:
     args: argparse.Namespace = parser.parse_args()
     model_path: Path = args.model
 
-    model = load_model(
-        model_path,
-        import_model=Model,
-        import_preprocess_message=preprocess_message,
-        import_tokenize=tokenize,
-    )
+    model = load_model(model_path)
 
     logging.info("Reading text from stdin...")
     text = sys.stdin.read()
