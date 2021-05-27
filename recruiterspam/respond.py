@@ -134,30 +134,34 @@ def _get_target_level(
 def _respond_compensation(text: str) -> Optional[str]:
     current_company_info = _CurrentCompanyInfo.from_environ()
     if current_company_info is None:
+        logging.info(
+            "No current company set in the environment; not comparing compensation"
+        )
         return None
 
     target_company = _get_target_company(
         omit_companies={current_company_info.current_company}, text=text
     )
+    logging.info("Target company detected to be: %s", target_company)
     if target_company is None:
-        return "The company you represent could not be automatically determined, so compensation information could not be looked up. Please state the level and specific compensation range for this position."
+        return None
 
     target_level_result = _get_target_level(
         current_company_info=current_company_info,
         target_company_name=target_company,
     )
     if target_level_result is None:
-        return f"It appears that you represent {target_company.upper()}, but compensation information could not be looked up. Please state the level and specific compensation range for this position."
+        return None
     (target_level, compensation_ratio) = target_level_result
     compensation_rating = _describe_compensation_rating(compensation_ratio)
 
-    return f"""It appears that you represent {target_company.upper()}. Here is its automatic compensation report:
+    return f"""I enjoy competitive compensation at my current company, {current_company_info.current_company.upper()}. I've automatically looked up the compensation details for the company you appear to represent, {target_company.upper()}, and it seems like I would have to receive an offer at the below level to be compensated competitively.
 
-Current company: {target_company.upper()}
+Company name: {target_company.upper()}
 Compensation rating: {compensation_rating}
 Suggested level for competitive compensation: {target_level.combined_title.upper()}
 
-Please confirm that you can offer the position at the above level, or specify the compensation range for this position.
+Can you confirm that you can offer the position at the above level?
 """
 
 
@@ -172,34 +176,45 @@ def respond(text: str, classify_result: ClassifyResult) -> str:
     keywords = ", ".join(keyword.upper() for keyword in classify_result.top_keywords)
     paragraphs.append(
         f"""
-This email is an automatically-generated reply.
-
-Your message has been flagged as a recruiting message:
-
-Probability: {prob_str}%
-Top keywords: {keywords}
-""".strip()
+I am always open to the right opportunity, but since I receive so much email from recruiters, I don't have time to individually follow up on every message.
+"""
+    )
+    paragraphs.append(
+        """
+To make things easier for us both, please include the following in your reply:
+* The location of the position.
+* Whether your company supports remote work.
+* The team which is hiring.
+* How my experience relates to the team in question.
+* When you are looking to fill the position.
+"""
     )
 
     try:
         compensation_text = _respond_compensation(text)
         if compensation_text is not None:
             paragraphs.append(compensation_text)
+        else:
+            paragraphs.append(
+                """
+I enjoy competitive compensation at my current company. To ensure that we're not wasting each other's time with a job offer I can't economically accept, please also include a salary range for the position.
+"""
+            )
     except Exception as e:
         logging.exception(e)
 
     paragraphs.append(
         """
-Please include the following in your reply:
-* The location of the position.
-* Whether your company supports remote work.
-* The team which is hiring.
-* How my experience relates to the team in question.
-* When you are looking to fill the position.
-""".strip()
+The following are the details of why your message was flagged as a recruiting message. If this email was sent in error, you can ignore it.
+
+Probability: {prob_str}%
+Top keywords: {keywords}
+""".format(
+            prob_str=prob_str, keywords=keywords
+        )
     )
     paragraphs.append("Best,\nRecruiter Reply Bot")
-    return "\n\n".join(paragraphs)
+    return "\n\n".join(paragraph.strip() for paragraph in paragraphs)
 
 
 def main() -> None:
