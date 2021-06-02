@@ -1,6 +1,7 @@
 import argparse
 from dataclasses import dataclass
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import List
@@ -15,7 +16,40 @@ class ClassifyResult:
     top_keywords: List[str]
 
 
+PICTURE_RE = re.compile(
+    r"""
+    (
+        \[
+            https?://
+            [^]]*
+        \]
+        |
+        \[
+            cid:
+            [^\]]*
+        \]
+    )
+""",
+    re.VERBOSE,
+)
+
+
+def remove_lines_after_picture(text: str) -> str:
+    """Search the body and remove any lines including and after a picture.
+
+    This is because some email signatures include images. In particular, they
+    oftentimes contain extra text afterward with a legal disclaimer.
+    """
+    lines = []
+    for line in text.splitlines():
+        if PICTURE_RE.search(line) is not None:
+            break
+        lines.append(line)
+    return "".join(line + "\n" for line in lines)
+
+
 def classify(model: Model, text: str, num_top_keywords: int) -> ClassifyResult:
+    text = remove_lines_after_picture(text)
     X = model.count_vectorizer.transform(
         [
             {

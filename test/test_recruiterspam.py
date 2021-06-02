@@ -1,4 +1,4 @@
-from recruiterspam.classify import classify
+from recruiterspam.classify import classify, remove_lines_after_picture
 from recruiterspam.backtest import backtest
 from typing import Any, Dict, List
 import numpy as np
@@ -123,6 +123,37 @@ def test_backtest(example_messages, example_model) -> None:
     )
     assert true_positives == 3
     assert false_positives == 0
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        (
+            """
+Foo
+Bar
+[http://example.com]
+Qux
+""",
+            """
+Foo
+Bar
+""",
+        ),
+        (
+            """
+Foo
+[cid:image001.png@01D36532.511076C0]<http://www.aws.amazon.com/>
+Bar
+            """,
+            """
+Foo
+""",
+        ),
+    ],
+)
+def test_remove_lines_after_picture(before: str, after: str) -> None:
+    assert remove_lines_after_picture(before) == after
 
 
 def test_classify(example_model) -> None:
