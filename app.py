@@ -66,7 +66,11 @@ def reply() -> Response:
     )
     print(json_result)
 
-    if classify_result.prediction and not subject.startswith("Re: "):
+    if not classify_result.prediction:
+        print(f"Skipping message (not recruiter-spam): {subject}")
+    elif subject.startswith("Re: "):
+        print(f"Skipping message (appears to be a reply): {subject}")
+    else:
         _do_reply(
             message_id=message_id,
             subject=subject,
@@ -75,8 +79,6 @@ def reply() -> Response:
             from_=from_,
             to=to,
         )
-    else:
-        print(f"Skipping message: {subject}")
     return json_result
 
 
