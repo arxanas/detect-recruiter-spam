@@ -91,8 +91,8 @@ def _do_reply(
     to: str,
 ) -> None:
     bot_domain = os.environ["EMAIL_DOMAIN"]
-    bot_name = "RecruiterReplyBot"
-    bot_email = f"recruiter.reply.bot@{bot_domain}"
+    bot_name = os.environ.get("EMAIL_NAME", "RecruiterReplyBot")
+    bot_email = os.environ.get("EMAIL_ADDRESS", f"recruiter.reply.bot@{bot_domain}")
     if bot_name in from_ or bot_name in to:
         # Try to avoid going into an infinite loop during testing.
         print(f"Skipping mail because it seems to include {bot_name} as a recipient")
