@@ -176,12 +176,12 @@ def respond(text: str, classify_result: ClassifyResult) -> str:
     keywords = ", ".join(keyword.upper() for keyword in classify_result.top_keywords)
     paragraphs.append(
         f"""
-I am always open to the right opportunity, but since I receive so much email from recruiters, I don't have time to individually follow up on every message.
+Thank you for your email about this position. I'm currently employed, but I am always open to the right opportunity if it comes along.
 """
     )
     paragraphs.append(
         """
-To make things easier for us both, please include the following in your reply:
+To help me evaluate whether this is a good opportunity for me, please send over the following information:
 * The location of the position.
 * Whether your company supports remote work.
 * The team which is hiring.
