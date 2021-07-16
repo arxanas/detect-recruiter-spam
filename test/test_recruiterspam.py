@@ -159,10 +159,24 @@ def test_remove_lines_after_picture(before: str, after: str) -> None:
 def test_classify(example_model) -> None:
     result = classify(
         model=example_model,
-        text="Get more compensation by getting a job with Company2",
+        text="Get more compensation by getting a fast-paced job with opportunities at Company2",
         num_top_keywords=5,
     )
     assert result.prediction == True
+    assert result.top_keywords == [
+        "at",
+        "company2",
+        "compensation",
+        "get",
+        "opportunity",
+    ]
+
+    result = classify(
+        model=example_model,
+        text="Get more compensation by getting a job with Company2",
+        num_top_keywords=5,
+    )
+    assert result.prediction == False
     assert result.probability >= 0.9
     assert result.top_keywords == ["company2", "compensation", "get", "more"]
 
@@ -174,3 +188,12 @@ def test_classify(example_model) -> None:
     assert result.prediction == False
     assert result.probability <= 0.3
     assert result.top_keywords == ["python", "rust", "would", "who"]
+
+    result = classify(
+        model=example_model,
+        text="Cześć, nie ma angielskich słów w tym tekstu",
+        num_top_keywords=5,
+    )
+    assert result.prediction == False
+    assert result.probability == 0.5
+    assert result.top_keywords == []

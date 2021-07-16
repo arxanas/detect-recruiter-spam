@@ -82,7 +82,7 @@ def classify(model: Model, text: str, num_top_keywords: int) -> ClassifyResult:
 
     return ClassifyResult(
         # Don't use `numpy` numeric values, to ensure that they can be serialized.
-        prediction=bool(pred),
+        prediction=bool(prob_yes > 0.95),
         probability=float(prob_yes),
         top_keywords=[word for (word, _neg_prob, _pos_prob) in words],
     )
