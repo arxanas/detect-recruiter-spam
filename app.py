@@ -50,6 +50,7 @@ def reply() -> Response:
     if from_ is None:
         from_ = query["headers"]["from"]
     to = query["headers"]["to"]
+    in_reply_to = query["headers"].get("in_reply_to")
 
     if body is None:
         print("No body available, not processing")
@@ -68,7 +69,7 @@ def reply() -> Response:
 
     if not classify_result.prediction:
         print(f"Skipping message (not recruiter-spam): {subject}")
-    elif subject.startswith("Re: "):
+    elif subject.startswith("Re: ") or in_reply_to is not None:
         print(f"Skipping message (appears to be a reply): {subject}")
     else:
         _do_reply(
@@ -93,10 +94,6 @@ def _do_reply(
     bot_domain = os.environ["EMAIL_DOMAIN"]
     bot_name = os.environ.get("EMAIL_NAME", "RecruiterReplyBot")
     bot_email = os.environ.get("EMAIL_ADDRESS", f"recruiter.reply.bot@{bot_domain}")
-    if bot_name in from_ or bot_name in to:
-        # Try to avoid going into an infinite loop during testing.
-        print(f"Skipping mail because it seems to include {bot_name} as a recipient")
-        return
 
     reply_addresses = [from_, to]
     reply_to = to
