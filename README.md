@@ -1,3 +1,5 @@
+See the blog post at [blog.waleedkhan.name/detect-recruiter-spam](https://blog.waleedkhan.name/detect-recruiter-spam/).
+
 ## Downloading your dataset
 
 Example invocation to download emails from IMAP:
