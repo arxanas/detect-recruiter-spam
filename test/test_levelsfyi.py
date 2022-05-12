@@ -19,8 +19,8 @@ def test_available_companies() -> None:
 
 
 def test_leveling() -> None:
-    companies = get_leveling()
-    assert companies["Google"] == [
+    leveling = get_leveling("Google")
+    assert leveling == [
         Level(titles=["L3", "SWE II"], percent_workforce=20),
         Level(titles=["L4", "SWE III"], percent_workforce=20),
         Level(titles=["L5", "Senior SWE"], percent_workforce=20),

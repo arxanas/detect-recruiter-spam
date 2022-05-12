@@ -1,8 +1,14 @@
+from base64 import b64decode, b64encode
 from collections import defaultdict
 from dataclasses import dataclass
+from hashlib import md5
 from statistics import median
 from typing import Dict, List, Set
+import json
+import zlib
 
+
+from Crypto.Cipher import AES
 import requests
 
 CompanyName = str
@@ -23,16 +29,40 @@ def get_available_companies() -> Set[CompanyName]:
     return set(requests.get(url).json())
 
 
-def get_leveling() -> Dict[CompanyName, List[Level]]:
-    url = "https://www.levels.fyi/js/data.json"
-    payload = requests.get(url).json()["Software Engineer"]
-    return {
-        company_name: [
-            Level(titles=level["titles"], percent_workforce=level["percentWorkforce"])
-            for level in levels
-        ]
-        for company_name, levels in payload.items()
+def decode_payload(payload: str) -> object:
+    # From https://www.levels.fyi/js/commonUtils.js
+    e = "levelstothemoon!!"
+    key = md5(e.encode("utf-8")).digest()
+    key = b64encode(key)
+    key = key[:16]
+    ciphertext = b64decode(payload)
+    cipher = AES.new(key, AES.MODE_ECB)
+    plaintext_bytes = cipher.decrypt(ciphertext)
+    plaintext_bytes = zlib.decompress(plaintext_bytes)
+    plaintext = plaintext_bytes.decode("utf-8")
+    return json.loads(plaintext)
+
+
+def get_leveling(company_name: str) -> List[Level]:
+    url = "https://api.levels.fyi/v1/levels"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36",
     }
+    params = {
+        "role": "Software Engineer",
+        "companies[]": company_name,
+    }
+    payload = requests.get(url, headers=headers, params=params).json()["payload"]
+    payload = decode_payload(payload)
+
+    all_level_info = {
+        company_info["company"]: [
+            Level(titles=level["titles"], percent_workforce=level["percent_workforce"])
+            for level in company_info["levels"]
+        ]
+        for company_info in payload["companies"]
+    }
+    return all_level_info[company_name]
 
 
 def get_salary_data(company_name: CompanyName, city_name: str) -> Dict[str, int]:

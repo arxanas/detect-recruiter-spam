@@ -85,7 +85,7 @@ def _get_target_level(
     current_company_info: _CurrentCompanyInfo,
     target_company_name: CompanyName,
 ) -> Optional[Tuple[Level, float]]:
-    current_company_levels = get_leveling()[current_company_info.current_company]
+    current_company_levels = get_leveling(current_company_info.current_company)
     current_company_salary_data = get_salary_data(
         company_name=current_company_info.current_company,
         city_name=current_company_info.current_city,
@@ -94,7 +94,7 @@ def _get_target_level(
         current_company_info.current_level
     ]
 
-    target_company_levels = get_leveling()[target_company_name]
+    target_company_levels = get_leveling(target_company_name)
     target_company_salary_data = get_salary_data(
         company_name=target_company_name,
         city_name=current_company_info.current_city,
