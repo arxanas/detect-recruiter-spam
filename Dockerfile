@@ -14,7 +14,7 @@ RUN python -m nltk.downloader wordnet
 
 COPY . .
 
-RUN env PYTHONPATH=. pytest
+RUN env PYTHONPATH=. pytest -l -vv
 RUN python -m recruiterspam.train --messages messages.json --output ${MODEL_PATH}
 RUN echo "Amazing opportunities for software engineers like you" | python -m recruiterspam.classify --model ${MODEL_PATH}
 
