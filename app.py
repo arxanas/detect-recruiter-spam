@@ -19,6 +19,11 @@ def get_model() -> Model:
         model_path=Path("model.pkl"),
     )
 
+@app.route("/health")
+def health() -> Response:
+    model = get_model()
+    return f"Loaded model version {model.model_version}"
+
 
 @app.route("/detect", methods=["GET", "POST"])
 def detect() -> Response:
