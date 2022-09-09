@@ -1,4 +1,6 @@
 import email.utils
+import smtplib
+import ssl
 import os
 from functools import cache
 from pathlib import Path
@@ -103,24 +105,56 @@ def _do_reply(
     reply_addresses = [from_, to]
     reply_to = to
     plain = respond(text, classify_result)
-    payload = {
-        "from": email.utils.formataddr((bot_name, bot_email)),
-        "to": [from_, to],
-        "plain": plain,
-        "subject": f"Re: {subject}",
-        "headers": {
-            "Reply-To": to,
-            "In-Reply-To": message_id,
-            "References": message_id,
-        },
-    }
 
-    email_api_url = os.environ["EMAIL_API_URL"]
-    email_api_key = os.environ["EMAIL_API_KEY"]
-    requests.post(
-        email_api_url,
-        headers={"Authorization": f"Bearer {email_api_key}"},
-        json=payload,
-    )
-    print(f"Sent reply to: {reply_addresses!r}")
-    print(f"Reply-To: {reply_to}")
+    bot_from_address = email.utils.formataddr((bot_name, bot_email))
+
+    gmail_username = os.environ.get("GMAIL_USERNAME")
+    if gmail_username is not None:
+        gmail_app_password = os.environ["GMAIL_APP_PASSWORD"]
+        # As per https://support.google.com/a/answer/176600?hl=en
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(
+            host="smtp.gmail.com",
+            port=465,
+            context=context,
+        ) as smtp:
+            message = f"""\
+From: {bot_from_address}\r
+To: {from_}, {to}\r
+Reply-To: {to}\r
+In-Reply-To: {message_id}\r
+References: {message_id}\r
+Subject: Re: {subject}\r
+\r
+{plain}
+"""
+            smtp.login(gmail_username, gmail_app_password)
+            smtp.sendmail(
+                from_addr=bot_from_address,
+                to_addrs=[from_, to],
+                msg=message,
+            )
+            print(f"Sent reply to (via Gmail): {reply_addresses!r}")
+            print(f"Reply-To: {reply_to}")
+
+    else:
+        email_api_url = os.environ["EMAIL_API_URL"]
+        email_api_key = os.environ["EMAIL_API_KEY"]
+        payload = {
+            "from": bot_from_address,
+            "to": [from_, to],
+            "plain": plain,
+            "subject": f"Re: {subject}",
+            "headers": {
+                "Reply-To": to,
+                "In-Reply-To": message_id,
+                "References": message_id,
+            },
+        }
+        requests.post(
+            email_api_url,
+            headers={"Authorization": f"Bearer {email_api_key}"},
+            json=payload,
+        )
+        print(f"Sent reply to (via API): {reply_addresses!r}")
+        print(f"Reply-To: {reply_to}")
