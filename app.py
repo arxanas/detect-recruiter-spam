@@ -2,6 +2,7 @@ import email.utils
 import smtplib
 import ssl
 import os
+from email.message import EmailMessage
 from functools import cache
 from pathlib import Path
 
@@ -110,6 +111,15 @@ def _do_reply(
 
     gmail_username = os.environ.get("GMAIL_USERNAME")
     if gmail_username is not None:
+        message = EmailMessage()
+        message.set_content(plain)
+        message["From"] = bot_from_address
+        message["To"] = ", ".join(reply_addresses)
+        message["Reply-To"] = to
+        message["In-Reply-To"] = message_id
+        message["References"] = message_id
+        message["Subject"] = f"Re: {subject}"
+
         gmail_app_password = os.environ["GMAIL_APP_PASSWORD"]
         # As per https://support.google.com/a/answer/176600?hl=en
         context = ssl.create_default_context()
@@ -118,22 +128,8 @@ def _do_reply(
             port=465,
             context=context,
         ) as smtp:
-            message = f"""\
-From: {bot_from_address}\r
-To: {from_}, {to}\r
-Reply-To: {to}\r
-In-Reply-To: {message_id}\r
-References: {message_id}\r
-Subject: Re: {subject}\r
-\r
-{plain}
-"""
             smtp.login(gmail_username, gmail_app_password)
-            smtp.sendmail(
-                from_addr=bot_from_address,
-                to_addrs=[from_, to],
-                msg=message,
-            )
+            smtp.send_message(message)
             print(f"Sent reply to (via Gmail): {reply_addresses!r}")
             print(f"Reply-To: {reply_to}")
 
