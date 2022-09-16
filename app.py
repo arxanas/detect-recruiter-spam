@@ -22,6 +22,7 @@ def get_model() -> Model:
         model_path=Path("model.pkl"),
     )
 
+
 @app.route("/health")
 def health() -> Response:
     model = get_model()
