@@ -78,7 +78,11 @@ def reply() -> Response:
 
     if not classify_result.prediction:
         print(f"Skipping message (not recruiter-spam): {subject}")
-    elif subject.startswith("Re: ") or in_reply_to is not None:
+    elif (
+        subject.startswith("Re: ")
+        or subject.startswith("Message replied: ")  # LinkedIn messages
+        or in_reply_to is not None
+    ):
         print(f"Skipping message (appears to be a reply): {subject}")
     else:
         _do_reply(
